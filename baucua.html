@@ -1,72 +1,88 @@
-<!-- <script type="module">
-  // Import the functions you need from the SDKs you need
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-app.js";
-  import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-analytics.js";
-  // TODO: Add SDKs for Firebase products that you want to use
-  // https://firebase.google.com/docs/web/setup#available-libraries
-
-  // Your web app's Firebase configuration
-  // For Firebase JS SDK v7.20.0 and later, measurementId is optional
-  const firebaseConfig = {
-    apiKey: "AIzaSyDezhyeDURAA_WfX8xxhGJ7KcNTVM8cwO4",
-    authDomain: "tuankiet-gametet.firebaseapp.com",
-    projectId: "tuankiet-gametet",
-    storageBucket: "tuankiet-gametet.firebasestorage.app",
-    messagingSenderId: "406766414133",
-    appId: "1:406766414133:web:e4a99221da90dcc657847c",
-    measurementId: "G-KJT59Z8FCK"
-  };
-
-  // Initialize Firebase
-  const app = initializeApp(firebaseConfig);
-  const analytics = getAnalytics(app);
-</script> -->
-
-
 <!DOCTYPE html>
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bầu Cua Online Realtime</title>
+    <title>Bầu Cua V4 - Chế Độ Nhà Cái</title>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
     
     <style>
-        body { font-family: sans-serif; background: #b71c1c; color: #333; text-align: center; margin: 0; padding: 10px; }
-        .screen { display: none; max-width: 500px; margin: 0 auto; background: #fff; padding: 20px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
+        body { font-family: 'Segoe UI', sans-serif; background: #b71c1c; color: #333; text-align: center; margin: 0; padding: 10px; user-select: none; }
+        .screen { display: none; max-width: 600px; margin: 0 auto; background: #fff; padding: 15px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
         .active { display: block; }
-        input, button { width: 100%; padding: 12px; margin: 5px 0; border-radius: 5px; border: 1px solid #ccc; font-size: 1rem; }
-        button { background: #ffeb3b; color: #d32f2f; font-weight: bold; border: none; cursor: pointer; }
-        .dice-box { display: flex; justify-content: center; gap: 10px; margin: 20px 0; background: #eee; padding: 10px; border-radius: 10px; }
-        .dice { width: 60px; height: 60px; font-size: 2.5rem; display: flex; align-items: center; justify-content: center; background: white; border-radius: 5px; }
-        .board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 20px; }
-        .bet-item { border: 1px solid #ddd; padding: 10px; border-radius: 5px; cursor: pointer; position: relative; }
-        .bet-item.selected { background: #e3f2fd; border-color: #2196f3; }
-        .my-bet { position: absolute; top: 0; right: 0; background: #d32f2f; color: white; padding: 2px 6px; font-size: 0.8rem; border-radius: 0 5px 0 5px; }
-        .total-bet { display: block; font-size: 0.8rem; color: #666; margin-top: 5px; }
+        
+        input, button, select { width: 100%; padding: 12px; margin: 5px 0; border-radius: 5px; border: 1px solid #ccc; font-size: 1rem; box-sizing: border-box;}
+        button { font-weight: bold; border: none; cursor: pointer; transition: 0.2s; }
+        .btn-primary { background: #ffeb3b; color: #d32f2f; }
+        .btn-success { background: #4CAF50; color: white; }
+        .btn-danger { background: #d32f2f; color: white; }
+        .btn-warning { background: #FF9800; color: white; }
+        .btn-disabled { background: #ccc !important; cursor: not-allowed; color: #666 !important; }
+
+        .dice-box { display: flex; justify-content: center; gap: 10px; margin: 15px 0; background: #eee; padding: 10px; border-radius: 10px; }
+        .dice { width: 50px; height: 50px; font-size: 2rem; display: flex; align-items: center; justify-content: center; background: white; border-radius: 5px; border: 1px solid #ddd; }
+        
+        .board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px; }
+        .bet-item { border: 1px solid #ddd; padding: 5px; border-radius: 5px; cursor: pointer; position: relative; background: #fafafa; transition: transform 0.1s; }
+        .bet-item:active { transform: scale(0.95); }
+        
+        .my-bet-badge { position: absolute; top: -5px; right: -5px; background: #d32f2f; color: white; padding: 2px 6px; font-size: 0.7rem; border-radius: 10px; font-weight: bold; }
+        .total-bet { font-weight: bold; color: #d32f2f; font-size: 0.9rem; }
+        .detail-list { font-size: 0.7rem; color: #555; text-align: left; margin-top: 5px; border-top: 1px dashed #ccc; padding-top: 2px; height: 40px; overflow-y: auto; }
+        .detail-item { display: flex; justify-content: space-between; }
+
         .shaking { animation: shake 0.5s infinite; }
-        @keyframes shake { 0% { transform: rotate(0deg); } 25% { transform: rotate(5deg); } 75% { transform: rotate(-5deg); } 100% { transform: rotate(0deg); } }
-        .user-info { display: flex; justify-content: space-between; font-weight: bold; margin-bottom: 15px; color: #d32f2f; }
-        #log { font-size: 0.8rem; color: #666; height: 30px; margin-bottom: 10px; }
+        @keyframes shake { 0% { transform: rotate(0deg); } 25% { transform: rotate(10deg); } 75% { transform: rotate(-10deg); } 100% { transform: rotate(0deg); } }
+
+        /* Winner Popup */
+        .winner-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 1000; display: none; align-items: center; justify-content: center; animation: fadeIn 0.3s; }
+        .winner-box { background: linear-gradient(135deg, #FFD700, #FF8C00); padding: 30px; border-radius: 20px; box-shadow: 0 0 20px #FFD700; text-align: center; border: 5px solid #fff; transform: scale(0.8); animation: popUp 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+        .winner-name { font-size: 2.5rem; font-weight: bold; color: #d32f2f; text-shadow: 2px 2px 0 #fff; margin: 10px 0; }
+        @keyframes popUp { to { transform: scale(1); } }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+        /* UI Elements */
+        .top-bar { display: flex; justify-content: space-between; align-items: center; background: #eee; padding: 8px; border-radius: 5px; margin-bottom: 10px; }
+        .balance { color: #2e7d32; font-weight: bold; font-size: 1.1rem; }
+        .player-list { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 10px; justify-content: center; }
+        .player-tag { font-size: 0.8rem; padding: 3px 8px; border-radius: 15px; background: #e0e0e0; border: 1px solid #ccc; display: flex; align-items: center; gap: 5px;}
+        .player-tag.ready { background: #C8E6C9; border-color: #4CAF50; color: #2e7d32; }
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #999; }
+        .ready .status-dot { background: #4CAF50; }
+        .admin-only { display: none !important; }
+        .admin-controls { border-top: 2px solid #ddd; margin-top: 15px; padding-top: 10px; }
+        
+        .bet-control-panel { display: flex; align-items: center; justify-content: center; gap: 10px; background: #FFF3E0; padding: 10px; border-radius: 8px; margin-bottom: 10px; border: 1px solid #FFCC80; }
+        .bet-input-wrapper { display: flex; align-items: center; width: 60%; }
+        .bet-input-wrapper input { text-align: center; font-weight: bold; font-size: 1.2rem; color: #d32f2f; margin: 0; }
+        
+        /* Host Badge */
+        .host-badge { background: #d32f2f; color: white; padding: 2px 5px; border-radius: 3px; font-size: 0.7rem; margin-left: 5px; }
     </style>
 </head>
 <body>
 
     <div id="loginScreen" class="screen active">
-        <h1>BẦU CUA ONLINE</h1>
+        <h1 style="color: #d32f2f;">🧧 BẦU CUA V4 (NHÀ CÁI) 🧧</h1>
         <input type="text" id="username" placeholder="Tên của bạn (VD: Tí)">
-        <input type="text" id="roomName" placeholder="Tên phòng (VD: 1234)">
-        <button onclick="joinGame()">VÀO PHÒNG NGAY</button>
+        <input type="text" id="roomName" placeholder="Tên phòng (VD: 6789)">
+        <label style="display:block; text-align:left; font-size: 0.9rem; color: #666;">Vốn mang theo:</label>
+        <input type="number" id="startBalance" value="1000" placeholder="Số tiền vốn">
+        <button class="btn-primary" onclick="joinGame()">VÀO PHÒNG</button>
     </div>
 
     <div id="gameScreen" class="screen">
-        <div class="user-info">
-            <span id="displayName"></span>
-            <span>Vốn: <span id="displayBalance">0</span>$</span>
+        <div class="top-bar">
+            <div>
+                <span id="displayName" style="font-weight: bold;">User</span>
+                <span id="roleLabel"></span>
+            </div>
+            <span class="balance"><span id="displayBalance">0</span> $</span>
         </div>
-        
-        <div id="log">Đang đợi cái...</div>
+
+        <div id="playerList" class="player-list"></div>
+        <div id="log">Chào mừng bạn!</div>
 
         <div class="dice-box">
             <div class="dice" id="d1">❓</div>
@@ -74,32 +90,58 @@
             <div class="dice" id="d3">❓</div>
         </div>
 
-        <button id="shakeBtn" onclick="requestShake()">XÓC ĐĨA (Tất cả cùng thấy)</button>
-        <button onclick="resetGame()" style="background: #eee; color: #333; margin-top: 5px; font-size: 0.8rem;">Ván mới (Reset cược)</button>
+        <div class="bet-control-panel">
+            <label style="font-weight:bold; white-space: nowrap;">Cược:</label>
+            <div class="bet-input-wrapper">
+                <input type="number" id="betInput" value="10" min="1" max="100" onchange="validateBetInput(this)">
+            </div>
+            <span style="font-weight:bold; color:#666">$</span>
+        </div>
+
+        <div style="display: flex; gap: 5px;">
+            <button id="readyBtn" class="btn-success" onclick="toggleReady()">CHỐT ĐƠN (Xong)</button>
+            <button id="shakeBtn" class="btn-primary btn-disabled admin-only" onclick="requestShake()" disabled>XÓC ĐĨA (Nhà cái)</button>
+        </div>
 
         <div class="board" id="board"></div>
+
+        <div id="adminPanel" class="admin-controls admin-only">
+            <div class="admin-title">👑 Bảng điều khiển NHÀ CÁI 👑</div>
+            <div style="display: flex; gap: 5px;">
+                <button onclick="triggerRefund()" class="btn-warning" style="font-size: 0.8rem;">⚠ HỦY & HOÀN TIỀN</button>
+                <button onclick="clearTable()" class="btn-danger" style="font-size: 0.8rem;">🗑 VÁN MỚI</button>
+            </div>
+        </div>
     </div>
 
+    <div id="winnerOverlay" class="winner-overlay" onclick="closeWinnerPopup()">
+        <div class="winner-box">
+            <div style="font-size: 1.2rem; color: #fff;">👑 THẦN BÀI VÁN NÀY 👑</div>
+            <div class="winner-name" id="winName">Name</div>
+            <div style="font-size: 2rem; color: #fff; font-weight:bold" id="winAmount">+0$</div>
+            <div style="margin-top:10px; color:#fff; font-size:0.8rem">Chạm để đóng</div>
+        </div>
+    </div>
+
+    <audio id="soundWin" src="https://www.soundjay.com/misc/sounds/coins-in-hand-2.mp3" preload="auto"></audio>
+    <audio id="soundLose" src="https://www.soundjay.com/misc/sounds/fail-trombone-01.mp3" preload="auto"></audio>
+
     <script>
-        // --- 1. CẤU HÌNH FIREBASE (BẠN PHẢI THAY ĐỔI ĐOẠN NÀY) ---
-        // Copy từ Firebase Console -> Project Settings -> General -> Your apps
         const firebaseConfig = {
-    apiKey: "AIzaSyDezhyeDURAA_WfX8xxhGJ7KcNTVM8cwO4",
-    authDomain: "tuankiet-gametet.firebaseapp.com",
-    projectId: "tuankiet-gametet",
-    storageBucket: "tuankiet-gametet.firebasestorage.app",
-    messagingSenderId: "406766414133",
-    appId: "1:406766414133:web:e4a99221da90dcc657847c",
-    measurementId: "G-KJT59Z8FCK"
-  };
-        // -----------------------------------------------------------
+            apiKey: "AIzaSyDezhyeDURAA_WfX8xxhGJ7KcNTVM8cwO4",
+            authDomain: "tuankiet-gametet.firebaseapp.com",
+            projectId: "tuankiet-gametet",
+            storageBucket: "tuankiet-gametet.firebasestorage.app",
+            messagingSenderId: "406766414133",
+            appId: "1:406766414133:web:e4a99221da90dcc657847c",
+            measurementId: "G-KJT59Z8FCK"
+        };
         
         if (!firebase.apps.length) {
             firebase.initializeApp(firebaseConfig);
         }
         const db = firebase.database();
 
-        // Dữ liệu Game
         const mascots = [
             {id: 'nai', i:'🦌', n:'Nai'}, {id: 'bau', i:'🥒', n:'Bầu'}, 
             {id: 'ga', i:'🐔', n:'Gà'}, {id: 'ca', i:'🐟', n:'Cá'}, 
@@ -108,172 +150,429 @@
         
         let myName = '';
         let roomId = '';
-        let myBalance = 1000;
-        let myBets = {};
+        let myBalance = 0;
         let isShaking = false;
+        let amIReady = false;
+        let isHost = false; // Nhà Cái
+        
+        let myCurrentBets = { nai:0, bau:0, ga:0, ca:0, cua:0, tom:0 };
+        let currentGlobalBets = {}; // Lưu cược toàn bộ bàn để Cái tính tiền
 
-        // --- LOGIC GIAO DIỆN ---
+        function validateBetInput(input) {
+            let val = parseInt(input.value);
+            if (isNaN(val) || val < 1) input.value = 1;
+            // Cho phép cược lớn hơn chút
+            if (val > 1000) input.value = 1000;
+        }
+
         function initBoard() {
             const board = document.getElementById('board');
             board.innerHTML = '';
             mascots.forEach(m => {
-                myBets[m.id] = 0;
                 board.innerHTML += `
                     <div class="bet-item" onclick="placeBet('${m.id}')">
-                        <div style="font-size:2rem">${m.i}</div>
-                        <div>${m.n}</div>
-                        <span class="my-bet" id="my-bet-${m.id}" style="display:none">0</span>
-                        <span class="total-bet" id="total-bet-${m.id}">Tổng: 0$</span>
+                        <div style="font-size:1.8rem">${m.i}</div>
+                        <div style="font-weight:bold">${m.n}</div>
+                        <span class="my-bet-badge" id="my-bet-${m.id}" style="display:none">0</span>
+                        <div class="total-bet" id="total-${m.id}">0$</div>
+                        <div class="detail-list" id="detail-${m.id}"></div>
                     </div>
                 `;
             });
         }
 
         function joinGame() {
-            const u = document.getElementById('username').value.trim();
+            const u = document.getElementById('username').value.trim().replace(/[.#$\[\]]/g, ""); 
             const r = document.getElementById('roomName').value.trim();
-            if(!u || !r) return alert("Vui lòng nhập đủ thông tin");
+            const b = parseInt(document.getElementById('startBalance').value);
+
+            if(!u || !r) return alert("Vui lòng nhập tên và phòng");
+            if(isNaN(b) || b <= 0) return alert("Vui lòng nhập vốn");
             
             myName = u;
             roomId = r;
+            myBalance = b;
             
             document.getElementById('loginScreen').classList.remove('active');
             document.getElementById('gameScreen').classList.add('active');
             document.getElementById('displayName').innerText = myName;
-            document.getElementById('displayBalance').innerText = myBalance;
+            updateBalanceUI();
             
             initBoard();
+            registerPlayer();
             listenToRoom();
         }
 
-        // --- LOGIC MẠNG (FIREBASE) ---
+        function registerPlayer() {
+            const playerRef = db.ref(`rooms/${roomId}/players/${myName}`);
+            playerRef.set({ ready: false, online: true });
+            playerRef.onDisconnect().remove();
+
+            const hostRef = db.ref(`rooms/${roomId}/host`);
+            hostRef.transaction((currentHost) => {
+                if (currentHost === null) return myName; 
+                return currentHost; 
+            }, (error, committed, snapshot) => {
+                if (error) return;
+                const actualHost = snapshot.val();
+                
+                // Xác định vai trò
+                if (actualHost === myName) {
+                    isHost = true;
+                    document.getElementById('roleLabel').innerHTML = '<span class="host-badge">NHÀ CÁI</span>';
+                    alert("👑 BẠN LÀ NHÀ CÁI! Bạn sẽ ăn thua trực tiếp với người chơi.");
+                    
+                    document.getElementById('shakeBtn').classList.remove('admin-only');
+                    document.getElementById('adminPanel').classList.remove('admin-only');
+                    // Ẩn nút Chốt đơn vì Cái không cược
+                    document.getElementById('readyBtn').style.display = 'none';
+                    // Ẩn input cược
+                    document.querySelector('.bet-control-panel').style.display = 'none';
+
+                    hostRef.onDisconnect().remove();
+                } else {
+                    isHost = false;
+                    document.getElementById('roleLabel').innerHTML = '';
+                    document.getElementById('log').innerText = `Chủ cái: ${actualHost}`;
+                }
+            });
+        }
+
+        function toggleReady() {
+            if (isShaking) return;
+            amIReady = !amIReady;
+            db.ref(`rooms/${roomId}/players/${myName}/ready`).set(amIReady);
+            toggleReadyUI(amIReady);
+        }
+
+        function toggleReadyUI(ready) {
+            const btn = document.getElementById('readyBtn');
+            if(ready) {
+                btn.innerText = "ĐÃ CHỐT";
+                btn.classList.remove('btn-success');
+                btn.style.background = '#e0e0e0'; btn.style.color = '#333';
+            } else {
+                btn.innerText = "CHỐT ĐƠN (Xong)";
+                btn.classList.add('btn-success');
+                btn.style.background = ''; btn.style.color = '';
+            }
+        }
+
         function listenToRoom() {
             const roomRef = db.ref('rooms/' + roomId);
 
-            // 1. Nghe trạng thái Xúc xắc
+            // Nghe người chơi
+            roomRef.child('players').on('value', (snapshot) => {
+                const players = snapshot.val() || {};
+                const listEl = document.getElementById('playerList');
+                listEl.innerHTML = '';
+                let allReady = true;
+                let playerCount = 0;
+
+                Object.keys(players).forEach(name => {
+                    // Không hiện Cái trong danh sách người chờ ready (vì Cái không cần ready)
+                    db.ref(`rooms/${roomId}/host`).once('value', hSnap => {
+                        const hostName = hSnap.val();
+                        if (name === hostName) {
+                            listEl.innerHTML += `<div class="player-tag" style="border:2px solid red; font-weight:bold">👑 Cái: ${name}</div>`;
+                            return; 
+                        }
+                        
+                        playerCount++;
+                        const p = players[name];
+                        if (!p.ready) allReady = false;
+                        listEl.innerHTML += `<div class="player-tag ${p.ready ? 'ready' : ''}"><div class="status-dot"></div>${name}</div>`;
+                    });
+                });
+
+                // Cập nhật nút Xóc cho Cái
+                const shakeBtn = document.getElementById('shakeBtn');
+                if (isHost) {
+                    if (playerCount > 0 && allReady) {
+                        shakeBtn.disabled = false;
+                        shakeBtn.classList.remove('btn-disabled');
+                        shakeBtn.innerText = "XÓC NGAY 🎲";
+                    } else {
+                        shakeBtn.disabled = true;
+                        shakeBtn.classList.add('btn-disabled');
+                        shakeBtn.innerText = `Chờ nhà con chốt...`;
+                    }
+                }
+            });
+
+            // Nghe kết quả
             roomRef.child('diceStatus').on('value', (snapshot) => {
                 const status = snapshot.val(); 
-                // status dạng: { shaking: boolean, result: [0,1,2] }
                 if(!status) return;
-
                 const diceEls = [document.getElementById('d1'), document.getElementById('d2'), document.getElementById('d3')];
                 
                 if (status.shaking) {
                     document.getElementById('log').innerText = "Nhà cái đang xóc...";
-                    diceEls.forEach(d => {
-                        d.classList.add('shaking');
-                        d.innerText = '🎲';
-                    });
+                    diceEls.forEach(d => { d.classList.add('shaking'); d.innerText = '🎲'; });
                     isShaking = true;
+                    if (!isHost) document.getElementById('readyBtn').disabled = true;
                 } else if (status.result) {
                     diceEls.forEach((d, i) => {
                         d.classList.remove('shaking');
-                        const mascotIndex = status.result[i];
-                        if (mascotIndex !== undefined) d.innerText = mascots[mascotIndex].i;
+                        d.innerText = mascots[status.result[i]].i;
                     });
                     
-                    if (isShaking) { // Chỉ tính tiền khi vừa chuyển từ trạng thái đang xóc sang có kết quả
-                        calculateResult(status.result);
+                    if (isShaking) { 
+                        // TÍNH TIỀN
+                        if (isHost) {
+                            calculateHostResult(status.result);
+                        } else {
+                            calculatePlayerResult(status.result);
+                        }
+                        
+                        findAndAnnounceBigWinner(status.result); // Vẫn tìm thần bài
                         isShaking = false;
+                        
+                        if (!isHost) {
+                            document.getElementById('readyBtn').disabled = false;
+                            amIReady = false; 
+                            db.ref(`rooms/${roomId}/players/${myName}/ready`).set(false);
+                            toggleReadyUI(false);
+                        }
                     }
                 }
             });
 
-            // 2. Nghe tổng tiền cược (Của tất cả mọi người)
+            // Nghe cược
             roomRef.child('bets').on('value', (snapshot) => {
-                const allBets = snapshot.val() || {};
-                // allBets dạng: { nai: 100, bau: 20 ... }
+                const allBetsData = snapshot.val() || {};
+                currentGlobalBets = allBetsData; // Lưu lại để Cái tính tiền
                 mascots.forEach(m => {
-                    const total = allBets[m.id] || 0;
-                    document.getElementById(`total-bet-${m.id}`).innerText = `Tổng: ${total}$`;
+                    const mascotBets = allBetsData[m.id] || {};
+                    let total = 0;
+                    let myBetAmount = 0;
+                    let detailsHTML = '';
+                    Object.keys(mascotBets).forEach(player => {
+                        const amount = mascotBets[player];
+                        total += amount;
+                        if (player === myName) myBetAmount = amount;
+                        detailsHTML += `<div class="detail-item"><span>${player}</span><b>${amount}$</b></div>`;
+                    });
+                    document.getElementById(`total-${m.id}`).innerText = total + '$';
+                    const badge = document.getElementById(`my-bet-${m.id}`);
+                    if (myBetAmount > 0) { badge.style.display = 'block'; badge.innerText = myBetAmount; } 
+                    else { badge.style.display = 'none'; }
+                    document.getElementById(`detail-${m.id}`).innerHTML = detailsHTML;
                 });
             });
-        }
-
-        // Đặt cược
-        function placeBet(mascotId) {
-            if (isShaking) return alert("Đang xóc, không được cược!");
-            if (myBalance < 10) return alert("Hết tiền rồi!");
-
-            // Trừ tiền cục bộ
-            myBalance -= 10;
-            myBets[mascotId] += 10;
-            updateMyUI();
-
-            // Gửi lên server (cộng dồn vào tổng cược chung của phòng)
-            const betRef = db.ref(`rooms/${roomId}/bets/${mascotId}`);
-            betRef.transaction((current_value) => {
-                return (current_value || 0) + 10;
-            });
-        }
-
-        function updateMyUI() {
-            document.getElementById('displayBalance').innerText = myBalance;
-            mascots.forEach(m => {
-                const el = document.getElementById(`my-bet-${m.id}`);
-                if (myBets[m.id] > 0) {
-                    el.style.display = 'block';
-                    el.innerText = myBets[m.id];
-                } else {
-                    el.style.display = 'none';
+            
+            // Nghe lệnh hoàn tiền
+            roomRef.child('command').on('value', (snapshot) => {
+                const cmd = snapshot.val();
+                if (!cmd) return;
+                if (cmd.type === 'REFUND' && cmd.timestamp > (window.lastProcessedCmd || 0)) {
+                    window.lastProcessedCmd = cmd.timestamp;
+                    // Nếu là Cái thì không cần hoàn tiền (vì chưa trừ tiền)
+                    if (!isHost) {
+                        let totalRefund = 0;
+                        mascots.forEach(m => { totalRefund += myCurrentBets[m.id]; });
+                        if (totalRefund > 0) {
+                            myBalance += totalRefund;
+                            alert(`⚠ Cái hủy ván! Đã hoàn lại ${totalRefund}$`);
+                            updateBalanceUI();
+                        }
+                        resetLocalBets();
+                    }
+                    document.getElementById('log').innerText = "Ván đấu bị hủy.";
                 }
             });
         }
 
-        // Xóc (Gửi lệnh lên server)
-        function requestShake() {
-            // Set trạng thái đang rung
-            db.ref(`rooms/${roomId}/diceStatus`).set({ shaking: true });
-
-            // Sau 2 giây thì random kết quả và gửi lên
-            setTimeout(() => {
-                const r1 = Math.floor(Math.random() * 6);
-                const r2 = Math.floor(Math.random() * 6);
-                const r3 = Math.floor(Math.random() * 6);
-                
-                db.ref(`rooms/${roomId}/diceStatus`).set({
-                    shaking: false,
-                    result: [r1, r2, r3]
-                });
-            }, 2000);
-        }
-        
-        // Tính tiền (Chạy ở mỗi máy trạm khi có kết quả trả về)
-        function calculateResult(resultIndices) {
-            let winAmount = 0;
-            // Danh sách các ID con vật trúng
-            const winningIds = resultIndices.map(i => mascots[i].id);
+        // --- HÀNH ĐỘNG CƯỢC ---
+        function placeBet(mascotId) {
+            if (isHost) return alert("Bạn là NHÀ CÁI, không được đặt cược!");
+            if (isShaking) return alert("Đang xóc!");
+            if (amIReady) return alert("Đã chốt đơn! Hủy chốt để cược thêm.");
             
+            const amountInput = document.getElementById('betInput');
+            let betAmount = parseInt(amountInput.value);
+            if (isNaN(betAmount) || betAmount < 1) betAmount = 1;
+            
+            if (myBalance < betAmount) return alert("Không đủ tiền!");
+
+            myBalance -= betAmount;
+            updateBalanceUI();
+            
+            myCurrentBets[mascotId] += betAmount;
+
+            const betRef = db.ref(`rooms/${roomId}/bets/${mascotId}/${myName}`);
+            betRef.transaction((current) => (current || 0) + betAmount);
+        }
+
+        // --- TÍNH TIỀN CHO NGƯỜI CHƠI (CON) ---
+        function calculatePlayerResult(resultIndices) {
+            let totalBet = 0;
+            let totalReturn = 0; // Gốc về
+            let totalProfit = 0; // Lãi (Lấy từ túi Cái)
+            
+            const winningIds = resultIndices.map(i => mascots[i].id);
+
             mascots.forEach(m => {
-                const myBetOnThis = myBets[m.id];
-                if (myBetOnThis > 0) {
+                const betAmount = myCurrentBets[m.id];
+                if (betAmount > 0) {
+                    totalBet += betAmount;
                     const count = winningIds.filter(id => id === m.id).length;
                     if (count > 0) {
-                        winAmount += myBetOnThis; // Trả gốc
-                        winAmount += myBetOnThis * count; // Ăn lãi
+                        totalReturn += betAmount;
+                        totalProfit += betAmount * count;
                     }
                 }
             });
 
-            if (winAmount > 0) {
-                myBalance += winAmount;
-                document.getElementById('log').innerText = `Chúc mừng! Bạn thắng ${winAmount}$`;
-                updateMyUI();
-            } else {
-                document.getElementById('log').innerText = "Thua rồi!";
+            const totalReceived = totalReturn + totalProfit;
+            const netResult = totalReceived - totalBet;
+
+            if (totalReceived > 0) {
+                myBalance += totalReceived;
             }
-        }
+            updateBalanceUI();
+            playSound(netResult);
 
-        function resetGame() {
-            // Xóa cược cá nhân
-            mascots.forEach(m => myBets[m.id] = 0);
-            updateMyUI();
-            document.getElementById('log').innerText = "Đã sẵn sàng ván mới";
+            let msg = "";
+            if (netResult > 0) msg = `🎉 Ăn của Cái: +${netResult}$`;
+            else if (netResult === 0) msg = `😐 Hòa vốn`;
+            else msg = `💸 Cúng cho Cái: ${Math.abs(netResult)}$`;
             
-            // Xóa tổng cược trên server (Chỉ cần 1 người làm)
-             db.ref(`rooms/${roomId}/bets`).set(null);
+            document.getElementById('log').innerText = msg;
+            resetLocalBets();
         }
 
+        // --- TÍNH TIỀN CHO NHÀ CÁI (HOST) ---
+        function calculateHostResult(resultIndices) {
+            const winningIds = resultIndices.map(i => mascots[i].id);
+            let totalRevenue = 0; // Tổng tiền thu về (tất cả tiền cược trên bàn)
+            let totalPayout = 0;  // Tổng tiền phải chi ra (Gốc + Lãi cho người trúng)
+
+            mascots.forEach(m => {
+                const betsOnMascot = currentGlobalBets[m.id] || {};
+                
+                // Duyệt qua tất cả người cược vào con này
+                Object.values(betsOnMascot).forEach(amount => {
+                    totalRevenue += amount; // Thu hết tiền vào túi trước
+
+                    const count = winningIds.filter(id => id === m.id).length;
+                    if (count > 0) {
+                        // Nếu trúng: Trả lại Gốc + Trả thêm Lãi
+                        // Gốc = amount
+                        // Lãi = amount * count
+                        totalPayout += amount + (amount * count);
+                    }
+                });
+            });
+
+            // Lợi nhuận của Cái = Tổng thu - Tổng chi
+            const netIncome = totalRevenue - totalPayout;
+            
+            myBalance += netIncome;
+            updateBalanceUI();
+            playSound(netIncome);
+
+            let msg = "";
+            if (netIncome > 0) msg = `🤑 Cái ăn: +${netIncome}$`;
+            else if (netIncome === 0) msg = `😐 Cái hòa tiền`;
+            else msg = `😭 Cái đền làng: ${netIncome}$`;
+
+            document.getElementById('log').innerText = msg;
+        }
+
+        // --- TIỆN ÍCH CHUNG ---
+        function playSound(amount) {
+            if (amount > 0) document.getElementById('soundWin').play().catch(()=>{});
+            else if (amount < 0) document.getElementById('soundLose').play().catch(()=>{});
+        }
+
+        function findAndAnnounceBigWinner(resultIndices) {
+            const winningIds = resultIndices.map(i => mascots[i].id);
+            let playerProfits = {};
+
+            mascots.forEach(m => {
+                const betsOnMascot = currentGlobalBets[m.id] || {};
+                Object.keys(betsOnMascot).forEach(player => {
+                    const amount = betsOnMascot[player];
+                    if (!playerProfits[player]) playerProfits[player] = 0;
+                    const count = winningIds.filter(id => id === m.id).length;
+                    if (count > 0) playerProfits[player] += amount * count;
+                    else playerProfits[player] -= amount;
+                });
+            });
+
+            let maxProfit = -999999999;
+            let winnerName = '';
+
+            for (const [player, profit] of Object.entries(playerProfits)) {
+                if (profit > maxProfit) {
+                    maxProfit = profit;
+                    winnerName = player;
+                }
+            }
+            
+            // Không tính nhà cái vào danh sách thần bài (để nhường spotlight cho người chơi)
+            db.ref(`rooms/${roomId}/host`).once('value', snap => {
+                if (winnerName !== snap.val() && winnerName && maxProfit > 0) {
+                    document.getElementById('winName').innerText = winnerName;
+                    document.getElementById('winAmount').innerText = `+${maxProfit}$`;
+                    document.getElementById('winnerOverlay').style.display = 'flex';
+                    setTimeout(() => { document.getElementById('winnerOverlay').style.display = 'none'; }, 4000);
+                }
+            });
+        }
+        
+        function closeWinnerPopup() { document.getElementById('winnerOverlay').style.display = 'none'; }
+        function updateBalanceUI() { document.getElementById('displayBalance').innerText = myBalance; }
+        function resetLocalBets() { mascots.forEach(m => myCurrentBets[m.id] = 0); }
+
+        function requestShake() {
+            if (!isHost) return alert("Chỉ NHÀ CÁI mới được Xóc!");
+            db.ref(`rooms/${roomId}/players`).once('value', snap => {
+                const players = snap.val() || {}; // Handle case no players
+                // Cái không cần ready, chỉ check người chơi thường
+                // Lọc ra danh sách người chơi không phải là host
+                db.ref(`rooms/${roomId}/host`).once('value', hSnap => {
+                     const hostName = hSnap.val();
+                     let allReady = true;
+                     
+                     Object.keys(players).forEach(pName => {
+                         if (pName !== hostName && !players[pName].ready) {
+                             allReady = false;
+                         }
+                     });
+
+                    if (!allReady) return alert("Có nhà con chưa chốt đơn!");
+
+                    db.ref(`rooms/${roomId}/diceStatus`).set({ shaking: true });
+                    setTimeout(() => {
+                        const r = [0,0,0].map(() => Math.floor(Math.random() * 6));
+                        db.ref(`rooms/${roomId}/diceStatus`).set({ shaking: false, result: r });
+                    }, 2000);
+                });
+            });
+        }
+
+        function triggerRefund() {
+            if(!confirm("Cái muốn hủy ván & trả lại tiền?")) return;
+            db.ref(`rooms/${roomId}/command`).set({ type: 'REFUND', timestamp: firebase.database.ServerValue.TIMESTAMP });
+            setTimeout(() => {
+                db.ref(`rooms/${roomId}/bets`).set(null);
+                resetAllPlayersReady();
+            }, 1000);
+        }
+
+        function clearTable() {
+            if(!confirm("Dọn bàn ván mới?")) return;
+            db.ref(`rooms/${roomId}/bets`).set(null);
+            resetAllPlayersReady();
+        }
+
+        function resetAllPlayersReady() {
+            db.ref(`rooms/${roomId}/players`).once('value', snap => {
+                snap.forEach(child => { child.ref.update({ ready: false }); });
+            });
+        }
     </script>
 </body>
 </html>
