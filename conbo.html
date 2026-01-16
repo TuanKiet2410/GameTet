@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bọ Cánh Cam Tìm Số 10A2</title>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+    
+    <style>
+        :root { --bg-color: #8bc34a; --hole-color: #33691e; --bug-size: 50px; }
+        body { font-family: 'Verdana', sans-serif; background-color: var(--bg-color); text-align: center; margin: 0; padding: 10px; overflow-x: hidden; }
+        
+        /* Màn hình đăng nhập */
+        .screen { display: none; }
+        .active { display: block; }
+        #loginScreen { background: white; padding: 20px; border-radius: 15px; max-width: 400px; margin: 50px auto; box-shadow: 0 4px 10px rgba(0,0,0,0.2); }
+        input, button { padding: 12px; width: 90%; margin: 5px 0; border-radius: 20px; border: 1px solid #ccc; font-size: 1rem; }
+        button { background: #ff5722; color: white; border: none; font-weight: bold; cursor: pointer; transition: 0.2s; }
+        button:hover { transform: scale(1.05); }
+
+        /* Sân chơi */
+        .garden { 
+            position: relative; width: 350px; height: 350px; margin: 20px auto; 
+            background: #aed581; border-radius: 50%; border: 8px solid #558b2f;
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.2);
+        }
+
+        /* Các lỗ số */
+        .hole {
+            position: absolute; width: 50px; height: 50px; 
+            background: var(--hole-color); color: white; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-weight: bold; border: 3px solid #fff; cursor: pointer;
+            box-shadow: 0 4px 0 #1b5e20; transition: transform 0.1s;
+        }
+        .hole:active { transform: translateY(4px); box-shadow: none; }
+        .hole.selected { border-color: #ffeb3b; background: #ff9800; transform: scale(1.1); }
+        .hole.winner { background: #ff5722; animation: flash 0.5s infinite; }
+
+        /* Con bọ */
+        #bug {
+            position: absolute; width: var(--bug-size); height: var(--bug-size);
+            font-size: 2.5rem; line-height: var(--bug-size);
+            top: 50%; left: 50%; transform: translate(-50%, -50%);
+            transition: all 0.3s ease-in-out; /* Chuyển động mượt */
+            z-index: 10; pointer-events: none;
+        }
+
+        .controls { margin-top: 20px; background: rgba(255,255,255,0.9); padding: 10px; border-radius: 10px; display: inline-block; }
+        .info-bar { font-weight: bold; color: #1b5e20; margin-bottom: 10px; }
+        .hidden { display: none !important; }
+
+        @keyframes flash { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+    </style>
+</head>
+<body>
+
+    <div id="loginScreen" class="screen active">
+        <h1 style="color: #ff5722">🐞 BỌ TÌM SỐ 🐞</h1>
+        <input type="text" id="username" placeholder="Tên bạn (VD: Tèo)">
+        <input type="text" id="roomName" placeholder="Tên phòng (VD: 10a2)">
+        <button onclick="joinGame()">VÀO VƯỜN</button>
+    </div>
+
+    <div id="gameScreen" class="screen">
+        <div class="info-bar">
+            Phòng: <span id="displayRoom">...</span> | <span id="statusText">Chọn một số đi!</span>
+        </div>
+
+        <div class="garden" id="garden">
+            <div id="bug">🐞</div>
+            </div>
+
+        <div class="controls">
+            <div>Bạn chọn: <b id="myChoice" style="color:red">Chưa chọn</b></div>
+            <div id="hostControls" class="hidden" style="margin-top:10px; border-top:1px solid #ccc; padding-top:10px">
+                <button onclick="startRun()">THẢ BỌ (Quay)</button>
+                <button onclick="resetGame()" style="background:#555">Chọn lại</button>
+            </div>
+        </div>
+        
+        <div id="winnerAnnounce" style="margin-top:15px; font-weight:bold; color: #d84315; font-size: 1.2rem;"></div>
+    </div>
+
+    <script>
+        // --- CẤU HÌNH (THAY ĐOẠN CONFIG CỦA BẠN VÀO ĐÂY) ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyDezhyeDURAA_WfX8xxhGJ7KcNTVM8cwO4",
+            authDomain: "tuankiet-gametet.firebaseapp.com",
+            projectId: "tuankiet-gametet",
+            storageBucket: "tuankiet-gametet.firebasestorage.app",
+            messagingSenderId: "406766414133",
+            appId: "1:406766414133:web:e4a99221da90dcc657847c",
+            databaseURL: "https://tuankiet-gametet-default-rtdb.firebaseio.com"
+        };
+        // ----------------------------------------------------
+
+        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        let myName, roomId, isHost = false;
+        const totalHoles = 10; // Số lượng lỗ (1-10)
+        let isRunning = false;
+        let positions = []; // Lưu tọa độ các lỗ
+
+        // 1. Tạo giao diện các lỗ xếp thành vòng tròn
+        function initGarden() {
+            const garden = document.getElementById('garden');
+            const radius = 130; // Bán kính vòng tròn
+            const centerX = 175; // Tâm X (1/2 width garden)
+            const centerY = 175; // Tâm Y
+
+            for (let i = 1; i <= totalHoles; i++) {
+                // Công thức toán học tính tọa độ vòng tròn
+                const angle = (i * (360 / totalHoles)) - 90; // -90 để số 1 nằm trên đỉnh
+                const radian = angle * (Math.PI / 180);
+                const x = centerX + radius * Math.cos(radian) - 25; // -25 là nửa size lỗ
+                const y = centerY + radius * Math.sin(radian) - 25;
+
+                const hole = document.createElement('div');
+                hole.className = 'hole';
+                hole.id = `hole-${i}`;
+                hole.innerText = i;
+                hole.style.left = `${x}px`;
+                hole.style.top = `${y}px`;
+                hole.onclick = () => chooseNumber(i);
+                
+                garden.appendChild(hole);
+                positions[i] = {x: x + 25, y: y + 25}; // Lưu tâm lỗ để bọ bò tới
+            }
+        }
+
+        function joinGame() {
+            myName = document.getElementById('username').value.trim();
+            roomId = document.getElementById('roomName').value.trim();
+            if(!myName || !roomId) return alert("Nhập đủ thông tin!");
+
+            document.getElementById('loginScreen').classList.remove('active');
+            document.getElementById('gameScreen').classList.add('active');
+            document.getElementById('displayRoom').innerText = roomId;
+            initGarden();
+
+            // Đăng ký Host
+            db.ref(`buggame/${roomId}/host`).transaction(curr => curr || myName, (err, committed, snap) => {
+                if(committed && snap.val() === myName) {
+                    isHost = true;
+                    document.getElementById('hostControls').classList.remove('hidden');
+                }
+            });
+
+            listenGame();
+        }
+
+        function listenGame() {
+            // Nghe trạng thái con bọ
+            db.ref(`buggame/${roomId}`).on('value', snap => {
+                const data = snap.val() || {};
+                
+                // Hiển thị người thắng
+                if(data.winner) {
+                    document.getElementById('statusText').innerText = `Kết quả: Số ${data.winner}`;
+                    highlightWinner(data.winner);
+                    document.getElementById('winnerAnnounce').innerText = (data.winner == myChoice) ? "🎉 BẠN THẮNG RỒI!" : "Chúc may mắn lần sau";
+                } else if (data.isRunning) {
+                    document.getElementById('statusText').innerText = "Bọ đang tìm chỗ trốn...";
+                    document.getElementById('winnerAnnounce').innerText = "";
+                    runAnimation(true); // Bắt đầu chạy hiệu ứng giả
+                } else {
+                    // Trạng thái chờ
+                    resetVisuals();
+                    document.getElementById('statusText').innerText = "Mời đặt cược";
+                }
+            });
+        }
+
+        let myChoice = null;
+        function chooseNumber(num) {
+            if(isRunning) return;
+            // Xóa chọn cũ
+            if(myChoice) document.getElementById(`hole-${myChoice}`).classList.remove('selected');
+            
+            myChoice = num;
+            document.getElementById(`hole-${num}`).classList.add('selected');
+            document.getElementById('myChoice').innerText = `Số ${num}`;
+        }
+
+        // --- HOST: ĐIỀU KHIỂN ---
+        function startRun() {
+            if(!isHost) return;
+            // Gửi tín hiệu đang chạy
+            db.ref(`buggame/${roomId}`).update({ isRunning: true, winner: null });
+            
+            // Random kết quả sau 3 giây
+            setTimeout(() => {
+                const winningNum = Math.floor(Math.random() * totalHoles) + 1;
+                db.ref(`buggame/${roomId}`).update({ isRunning: false, winner: winningNum });
+            }, 4000);
+        }
+
+        function resetGame() {
+            db.ref(`buggame/${roomId}`).update({ isRunning: false, winner: null });
+        }
+
+        // --- HIỆU ỨNG ANIMATION ---
+        let animInterval;
+        function runAnimation(isStart) {
+            const bug = document.getElementById('bug');
+            isRunning = isStart;
+            
+            if(isStart) {
+                // Cho bọ chạy loạn xạ
+                animInterval = setInterval(() => {
+                    const randHole = Math.floor(Math.random() * totalHoles) + 1;
+                    const pos = positions[randHole];
+                    // Thêm chút lệch ngẫu nhiên cho tự nhiên
+                    const offsetX = (Math.random() - 0.5) * 20;
+                    const offsetY = (Math.random() - 0.5) * 20;
+                    
+                    bug.style.left = (pos.x + offsetX) + 'px';
+                    bug.style.top = (pos.y + offsetY) + 'px';
+                    bug.style.transform = `translate(-50%, -50%) rotate(${Math.random()*360}deg)`;
+                }, 200); // Tốc độ chạy (200ms đổi chỗ 1 lần)
+            } else {
+                clearInterval(animInterval);
+            }
+        }
+
+        function highlightWinner(num) {
+            clearInterval(animInterval);
+            isRunning = false;
+            
+            // Đưa bọ về đúng lỗ thắng
+            const bug = document.getElementById('bug');
+            const pos = positions[num];
+            bug.style.left = pos.x + 'px';
+            bug.style.top = pos.y + 'px';
+            bug.style.transform = 'translate(-50%, -50%) scale(1.5)'; // Bọ to lên
+
+            // Sáng đèn lỗ
+            document.querySelectorAll('.hole').forEach(h => h.classList.remove('winner'));
+            document.getElementById(`hole-${num}`).classList.add('winner');
+        }
+
+        function resetVisuals() {
+            clearInterval(animInterval);
+            isRunning = false;
+            document.querySelectorAll('.hole').forEach(h => h.classList.remove('winner'));
+            // Bọ về giữa
+            const bug = document.getElementById('bug');
+            bug.style.left = '50%';
+            bug.style.top = '50%';
+            bug.style.transform = 'translate(-50%, -50%)';
+        }
+
+    </script>
+</body>
+</html>

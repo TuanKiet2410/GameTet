@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Bài Cào Nặn Hồi Hộp 10A2</title>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+    <style>
+        :root { --table-color: #2e7d32; --card-w: 70px; --card-h: 98px; }
+        body { font-family: 'Arial', sans-serif; background: var(--table-color); color: white; text-align: center; margin: 0; padding: 0; overflow-x: hidden; touch-action: manipulation; }
+        
+        /* Màn hình đăng nhập */
+        .screen { display: none; min-height: 100vh; }
+        .active { display: block; }
+        #loginScreen { background: white; color: #333; padding: 20px; max-width: 400px; margin: 50px auto; border-radius: 10px; }
+        input, button { padding: 12px; width: 90%; margin: 10px 0; border-radius: 5px; border: 1px solid #ccc; font-size: 1rem; }
+        button { background: #ffca28; border: none; font-weight: bold; cursor: pointer; color: #333; }
+        
+        /* Bàn chơi */
+        .game-header { padding: 10px; background: rgba(0,0,0,0.3); display: flex; justify-content: space-between; align-items: center; }
+        .players-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; padding: 10px; padding-bottom: 80px;}
+        
+        .player-seat { background: rgba(0,0,0,0.3); padding: 5px; border-radius: 10px; position: relative; min-height: 120px; }
+        .player-seat.me { border: 2px solid #ffca28; background: rgba(0,0,0,0.5); }
+        .player-name { font-weight: bold; font-size: 0.9rem; margin-bottom: 5px; display: block;}
+        .score-tag { background: #d32f2f; padding: 2px 6px; border-radius: 4px; font-size: 0.8rem; position: absolute; top: 5px; right: 5px; display: none; }
+        
+        .hand { display: flex; justify-content: center; gap: 5px; perspective: 1000px; }
+        .card { 
+            width: var(--card-w); height: var(--card-h); background: white; border-radius: 5px; 
+            position: relative; box-shadow: 2px 2px 5px rgba(0,0,0,0.5); 
+            display: flex; justify-content: center; align-items: center; font-weight: bold; color: #333;
+            transition: transform 0.5s;
+        }
+        .card.red { color: #d32f2f; }
+        .card-back { 
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+            background: #b71c1c; border-radius: 5px; border: 2px solid white;
+            background-image: repeating-linear-gradient(45deg, #b71c1c 0, #b71c1c 10px, #a31515 10px, #a31515 20px);
+            z-index: 2; 
+        }
+        .card-content { z-index: 1; font-size: 1.5rem; display: flex; flex-direction: column; align-items: center; }
+        .card-suit { font-size: 2rem; }
+        
+        /* Chế độ NẶN BÀI (Overlay) */
+        #squeezeOverlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.9); z-index: 100; display: none;
+            flex-direction: column; align-items: center; justify-content: center;
+        }
+        .squeeze-area {
+            width: 240px; height: 336px; /* Gấp 3-4 lần thẻ thường */
+            position: relative; margin-bottom: 20px;
+            border-radius: 15px; overflow: hidden; box-shadow: 0 0 20px white;
+            background: white;
+        }
+        .big-card-face {
+            width: 100%; height: 100%; display: flex; flex-direction: column; 
+            justify-content: center; align-items: center; font-size: 5rem; font-weight: bold;
+        }
+        .big-card-back {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: #b71c1c;
+            background-image: repeating-linear-gradient(45deg, #b71c1c 0, #b71c1c 20px, #900 20px, #900 40px);
+            border: 5px solid white; cursor: move;
+        }
+
+        /* Controls */
+        .controls { position: fixed; bottom: 0; left: 0; width: 100%; background: rgba(0,0,0,0.8); padding: 10px; display: flex; justify-content: center; gap: 10px; z-index: 50; }
+        .hidden { display: none !important; }
+        .btn-action { padding: 10px 20px; font-size: 1rem; border-radius: 20px; }
+        .status-msg { position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%); background: rgba(0,0,0,0.8); padding: 20px; border-radius: 10px; font-size: 1.5rem; display: none; z-index: 90;}
+    </style>
+</head>
+<body>
+
+    <div id="loginScreen" class="screen active">
+        <h1 style="color:#ffca28">BÀI CÀO 3 LÁ (NẶN)</h1>
+        <input type="text" id="username" placeholder="Tên bạn (VD: Kiệt)">
+        <input type="text" id="roomName" placeholder="Tên phòng (VD: 10a2)">
+        <button onclick="joinGame()">VÀO BÀN</button>
+    </div>
+
+    <div id="gameScreen" class="screen">
+        <div class="game-header">
+            <div>Phòng: <b id="displayRoom">...</b></div>
+            <div id="myRole">Tay em</div>
+        </div>
+
+        <div id="statusMsg" class="status-msg"></div>
+
+        <div class="players-grid" id="playersGrid">
+            </div>
+
+        <div class="controls">
+            <div id="hostControls" class="hidden">
+                <button class="btn-action" onclick="dealCards()">CHIA BÀI</button>
+                <button class="btn-action" style="background:#fff" onclick="revealAll()">LẬT HẾT</button>
+                <button class="btn-action" style="background:#f44336; color:white" onclick="resetGame()">VÁN MỚI</button>
+            </div>
+            <div id="playerControls" class="hidden">
+                <button class="btn-action" onclick="openSqueezeMode()">🔍 NẶN BÀI</button>
+                <button class="btn-action" style="background:#4caf50; color:white" onclick="showHand()">LẬT BÀI NGAY</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="squeezeOverlay">
+        <h2 style="color:white; margin-bottom:10px">Kéo lá bài để nặn!</h2>
+        <div class="squeeze-area">
+            <div class="big-card-face" id="squeezeFace">
+                </div>
+            <div class="big-card-back" id="squeezeBack"></div>
+        </div>
+        <div style="display:flex; gap:20px">
+            <button class="btn-action" onclick="nextSqueeze()">Lá tiếp theo</button>
+            <button class="btn-action" style="background:#4caf50" onclick="finishSqueeze()">Xong</button>
+        </div>
+    </div>
+
+    <script>
+        // --- CẤU HÌNH FIREBASE ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyDezhyeDURAA_WfX8xxhGJ7KcNTVM8cwO4",
+            authDomain: "tuankiet-gametet.firebaseapp.com",
+            projectId: "tuankiet-gametet",
+            storageBucket: "tuankiet-gametet.firebasestorage.app",
+            messagingSenderId: "406766414133",
+            appId: "1:406766414133:web:e4a99221da90dcc657847c",
+            databaseURL: "https://tuankiet-gametet-default-rtdb.firebaseio.com"
+        };
+        // -------------------------
+
+        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        let myName, roomId, isHost = false;
+        let myCards = [];
+        let currentSqueezeIndex = 0;
+
+        // UI
+        const overlay = document.getElementById('squeezeOverlay');
+        const squeezeBack = document.getElementById('squeezeBack');
+
+        function joinGame() {
+            myName = document.getElementById('username').value.trim();
+            roomId = document.getElementById('roomName').value.trim();
+            if(!myName || !roomId) return alert("Nhập đủ thông tin!");
+
+            document.getElementById('loginScreen').classList.remove('active');
+            document.getElementById('gameScreen').classList.add('active');
+            document.getElementById('displayRoom').innerText = roomId;
+
+            // Đăng ký Host
+            db.ref(`baicao/${roomId}/host`).transaction(curr => curr || myName, (err, committed, snap) => {
+                if(committed && snap.val() === myName) {
+                    isHost = true;
+                    document.getElementById('myRole').innerText = "Cầm Chương (Host)";
+                    document.getElementById('hostControls').classList.remove('hidden');
+                }
+            });
+
+            // Đăng ký người chơi
+            db.ref(`baicao/${roomId}/players/${myName}`).set({
+                name: myName,
+                status: 'waiting',
+                score: -1
+            });
+            db.ref(`baicao/${roomId}/players/${myName}`).onDisconnect().remove();
+
+            listenGame();
+            initSqueezeEvent();
+        }
+
+        function listenGame() {
+            db.ref(`baicao/${roomId}`).on('value', snap => {
+                const data = snap.val() || {};
+                const players = data.players || {};
+                const phase = data.phase || 'waiting'; // waiting, dealing, showing
+
+                const grid = document.getElementById('playersGrid');
+                grid.innerHTML = '';
+
+                Object.values(players).forEach(p => {
+                    const isMe = p.name === myName;
+                    
+                    // Logic tính điểm hiển thị
+                    let scoreText = '';
+                    let scoreDisplay = 'none';
+                    if (p.status === 'show' || phase === 'showing') {
+                        if(p.hand) {
+                            scoreText = calculateScore(p.hand);
+                            scoreDisplay = 'block';
+                        }
+                    }
+
+                    // Render bài
+                    let cardsHtml = '';
+                    if (p.hand) {
+                        p.hand.forEach(c => {
+                            // Chỉ hiện mặt bài khi: Là bài mình VÀ mình đã bấm Lật/Nặn xong - HOẶC - Giai đoạn lật bài
+                            const showFace = (isMe && p.status === 'show') || phase === 'showing';
+                            if (showFace) {
+                                const colorClass = (c.suit === '♥' || c.suit === '♦') ? 'red' : '';
+                                cardsHtml += `
+                                    <div class="card ${colorClass}">
+                                        <div class="card-content">
+                                            <div>${c.value}</div>
+                                            <div class="card-suit">${c.suit}</div>
+                                        </div>
+                                    </div>`;
+                            } else {
+                                // Bài úp
+                                cardsHtml += `
+                                    <div class="card">
+                                        <div class="card-back"></div>
+                                    </div>`;
+                            }
+                        });
+                    } else {
+                        // Chưa chia bài hoặc bài rỗng
+                        cardsHtml = `<div style="height:98px; display:flex; align-items:center; opacity:0.5">Chờ chia...</div>`;
+                    }
+
+                    grid.innerHTML += `
+                        <div class="player-seat ${isMe ? 'me' : ''}">
+                            <span class="player-name">${p.name} ${isMe ? '(Tôi)' : ''}</span>
+                            <div class="score-tag" style="display:${scoreDisplay}">${scoreText}</div>
+                            <div class="hand">${cardsHtml}</div>
+                        </div>
+                    `;
+
+                    // Cập nhật bài của mình để chuẩn bị nặn
+                    if(isMe && p.hand && JSON.stringify(p.hand) !== JSON.stringify(myCards)) {
+                        myCards = p.hand;
+                        if(phase === 'dealing' && p.status !== 'show') {
+                            document.getElementById('playerControls').classList.remove('hidden');
+                        }
+                    }
+                });
+
+                if (phase === 'showing') {
+                    document.getElementById('playerControls').classList.add('hidden');
+                }
+            });
+        }
+
+        // --- LOGIC GAME (HOST) ---
+        function dealCards() {
+            if(!isHost) return;
+            const suits = ['♠', '♣', '♦', '♥'];
+            const values = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
+            let deck = [];
+            for(let s of suits) for(let v of values) deck.push({suit:s, value:v});
+            deck.sort(() => Math.random() - 0.5);
+
+            db.ref(`baicao/${roomId}/players`).once('value', snap => {
+                const players = snap.val() || {};
+                const updates = {};
+                updates[`phase`] = 'dealing';
+                
+                Object.keys(players).forEach(key => {
+                    const c1 = deck.pop();
+                    const c2 = deck.pop();
+                    const c3 = deck.pop();
+                    updates[`players/${key}/hand`] = [c1, c2, c3];
+                    updates[`players/${key}/status`] = 'dealing'; // Đang nặn
+                });
+                db.ref(`baicao/${roomId}`).update(updates);
+            });
+        }
+
+        function revealAll() {
+            db.ref(`baicao/${roomId}`).update({ phase: 'showing' });
+        }
+
+        function resetGame() {
+            db.ref(`baicao/${roomId}`).update({ 
+                phase: 'waiting',
+                players: null // Cẩn thận: dòng này sẽ kick mọi người ra nếu code logic login lại
+            });
+            // Thực tế nên update từng player: hand = null, status = waiting
+             db.ref(`baicao/${roomId}/players`).once('value', snap => {
+                const players = snap.val();
+                const updates = { phase: 'waiting' };
+                Object.keys(players).forEach(k => {
+                    updates[`players/${k}/hand`] = null;
+                    updates[`players/${k}/status`] = 'waiting';
+                });
+                db.ref(`baicao/${roomId}`).update(updates);
+            });
+        }
+
+        // --- PLAYER ACTIONS ---
+        function showHand() {
+            db.ref(`baicao/${roomId}/players/${myName}/status`).set('show');
+            document.getElementById('playerControls').classList.add('hidden');
+        }
+
+        // --- TÍNH ĐIỂM ---
+        function calculateScore(hand) {
+            let faces = 0;
+            let points = 0;
+            hand.forEach(c => {
+                if(['J','Q','K'].includes(c.value)) {
+                    faces++;
+                    points += 10;
+                } else if (c.value === 'A') {
+                    points += 1;
+                } else {
+                    points += parseInt(c.value);
+                }
+            });
+
+            if (faces === 3) return "3 TÂY (Thắng lớn)";
+            const finalScore = points % 10;
+            if (finalScore === 0) return "Bù (0 nút)";
+            return `${finalScore} Nút`;
+        }
+
+        // --- TÍNH NĂNG NẶN BÀI (SQUEEZE) ---
+        function openSqueezeMode() {
+            if(myCards.length === 0) return;
+            currentSqueezeIndex = 0;
+            overlay.style.display = 'flex';
+            setupCardForSqueeze();
+        }
+
+        function setupCardForSqueeze() {
+            const card = myCards[currentSqueezeIndex];
+            const faceEl = document.getElementById('squeezeFace');
+            const color = (card.suit === '♥' || card.suit === '♦') ? '#d32f2f' : '#333';
+            
+            faceEl.innerHTML = `
+                <div style="color:${color}; font-size:4rem">${card.value}</div>
+                <div style="color:${color}; font-size:6rem">${card.suit}</div>
+            `;
+            
+            // Reset vị trí lá bài úp về che kín
+            squeezeBack.style.transform = 'translate(0, 0)';
+            squeezeBack.style.transition = 'none'; // Tắt transition để kéo cho mượt
+        }
+
+        function nextSqueeze() {
+            currentSqueezeIndex++;
+            if(currentSqueezeIndex >= myCards.length) currentSqueezeIndex = 0;
+            setupCardForSqueeze();
+        }
+
+        function finishSqueeze() {
+            overlay.style.display = 'none';
+            showHand(); // Tự động lật bài cho mọi người xem
+        }
+
+        // Logic kéo thả (Drag)
+        function initSqueezeEvent() {
+            let isDragging = false;
+            let startX, startY;
+
+            // Hỗ trợ cả chuột và cảm ứng
+            const startDrag = (e) => {
+                isDragging = true;
+                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                startX = clientX;
+                startY = clientY;
+                squeezeBack.style.transition = 'none';
+            };
+
+            const doDrag = (e) => {
+                if(!isDragging) return;
+                e.preventDefault(); // Chống cuộn trang
+                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                
+                const dx = clientX - startX;
+                const dy = clientY - startY;
+                
+                // Di chuyển lá bài úp theo ngón tay
+                squeezeBack.style.transform = `translate(${dx}px, ${dy}px)`;
+            };
+
+            const endDrag = () => {
+                isDragging = false;
+                // Nếu muốn nó tự quay về che lại (để nặn lại) thì bỏ comment dòng dưới
+                // squeezeBack.style.transition = 'transform 0.3s';
+                // squeezeBack.style.transform = 'translate(0, 0)';
+            };
+
+            squeezeBack.addEventListener('mousedown', startDrag);
+            squeezeBack.addEventListener('touchstart', startDrag);
+
+            window.addEventListener('mousemove', doDrag);
+            window.addEventListener('touchmove', doDrag, {passive: false});
+
+            window.addEventListener('mouseup', endDrag);
+            window.addEventListener('touchend', endDrag);
+        }
+
+    </script>
+</body>
+</html>

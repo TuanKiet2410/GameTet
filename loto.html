@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lô Tô Online 10A2</title>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+    <style>
+        :root { --main-color: #e91e63; --accent: #ffeb3b; }
+        body { font-family: 'Segoe UI', sans-serif; background: #fce4ec; text-align: center; margin: 0; padding: 10px; }
+        
+        /* Màn hình đăng nhập */
+        .screen { display: none; }
+        .active { display: block; }
+        #loginScreen { background: white; padding: 20px; border-radius: 10px; max-width: 400px; margin: 50px auto; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        input, button { padding: 12px; width: 90%; margin: 5px 0; border-radius: 5px; border: 1px solid #ddd; }
+        button { background: var(--main-color); color: white; border: none; font-weight: bold; cursor: pointer; font-size: 1rem; }
+        button:hover { opacity: 0.9; }
+
+        /* Game UI */
+        .header-info { display: flex; justify-content: space-between; padding: 10px; background: white; border-radius: 8px; margin-bottom: 10px; }
+        
+        /* Vòng quay số */
+        .ball-display {
+            width: 120px; height: 120px; background: var(--main-color); color: white;
+            border-radius: 50%; margin: 10px auto; display: flex; align-items: center; justify-content: center;
+            font-size: 4rem; font-weight: bold; border: 5px solid white; box-shadow: 0 5px 15px rgba(233, 30, 99, 0.4);
+        }
+        .last-balls { font-size: 0.9rem; color: #666; margin-bottom: 10px; height: 20px; overflow: hidden;}
+
+        /* Tờ vé số */
+        .ticket {
+            background: white; padding: 10px; border-radius: 10px; margin: 10px auto;
+            max-width: 600px; border: 2px solid var(--main-color);
+        }
+        .ticket-row { display: grid; grid-template-columns: repeat(9, 1fr); gap: 2px; margin-bottom: 2px; }
+        .cell {
+            aspect-ratio: 1; border: 1px solid #eee; display: flex; align-items: center; justify-content: center;
+            font-weight: bold; font-size: 1.1rem; background: #fafafa; position: relative;
+        }
+        .cell.has-number { background: #fff; color: #333; }
+        .cell.marked { background: var(--accent); color: #d32f2f; border-color: #fbc02d; }
+        .cell.empty { background: #e0e0e0; }
+
+        /* Bảng dò số (Dành cho ai muốn check) */
+        .check-board { display: grid; grid-template-columns: repeat(10, 1fr); gap: 2px; font-size: 0.7rem; max-width: 400px; margin: 20px auto; }
+        .cb-num { padding: 2px; background: #ddd; border-radius: 2px; }
+        .cb-num.active { background: var(--main-color); color: white; }
+
+        .controls { position: fixed; bottom: 0; left: 0; width: 100%; background: white; padding: 10px; box-shadow: 0 -2px 10px rgba(0,0,0,0.1); display: flex; justify-content: center; gap: 10px;}
+        .hidden { display: none !important; }
+        
+        /* Hiệu ứng */
+        .win-btn { background: #4caf50; animation: pulse 1s infinite; }
+        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.05); } 100% { transform: scale(1); } }
+    </style>
+</head>
+<body>
+
+    <div id="loginScreen" class="screen active">
+        <h1 style="color: var(--main-color)">LÔ TÔ SÀI GÒN</h1>
+        <input type="text" id="username" placeholder="Tên bạn (VD: Kiệt)">
+        <input type="text" id="roomName" placeholder="Tên phòng (VD: 10a2)">
+        <button onclick="joinGame()">VÀO CHƠI</button>
+    </div>
+
+    <div id="gameScreen" class="screen">
+        <div class="header-info">
+            <span>Phòng: <b id="displayRoom">...</b></span>
+            <span><b id="roleDisplay">...</b></span>
+        </div>
+
+        <div class="ball-display" id="currentBall">--</div>
+        <div class="last-balls" id="logBalls">Chờ quay số...</div>
+
+        <h3 style="margin:5px">VÉ CỦA BẠN</h3>
+        <div class="ticket" id="myTicket"></div>
+
+        <div id="playerActions" class="hidden" style="margin-bottom: 60px;">
+            <button class="win-btn" onclick="claimWin('KINH')">🎉 KINH (Ăn dòng)</button>
+            <button class="win-btn" style="background:#f44336" onclick="claimWin('CHUNG')">🏆 CHUNG (Ăn hết)</button>
+        </div>
+
+        <details>
+            <summary>Mở bảng dò số (1-90)</summary>
+            <div class="check-board" id="checkBoard"></div>
+        </details>
+
+        <div id="hostControls" class="controls hidden">
+            <button onclick="drawNumber()">QUAY SỐ</button>
+            <button onclick="resetGame()" style="background:#666">Ván mới</button>
+            <label style="display:flex; align-items:center; gap:5px; font-size:0.8rem;">
+                <input type="checkbox" id="voiceToggle" checked> Đọc số
+            </label>
+        </div>
+    </div>
+
+    <script>
+        // --- CẤU HÌNH (DÁN CONFIG CỦA BẠN VÀO ĐÂY) ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyDezhyeDURAA_WfX8xxhGJ7KcNTVM8cwO4",
+            authDomain: "tuankiet-gametet.firebaseapp.com",
+            projectId: "tuankiet-gametet",
+            storageBucket: "tuankiet-gametet.firebasestorage.app",
+            messagingSenderId: "406766414133",
+            appId: "1:406766414133:web:e4a99221da90dcc657847c",
+            databaseURL: "https://tuankiet-gametet-default-rtdb.firebaseio.com"
+        };
+        // ----------------------------------------------
+
+        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        let myName, roomId, isHost = false;
+        let drawnNumbers = [];
+        let myTicketData = []; // Mảng 3 dòng, mỗi dòng 9 phần tử (số hoặc null)
+
+        // Tạo bảng dò 1-90
+        const boardEl = document.getElementById('checkBoard');
+        for(let i=1; i<=90; i++) {
+            boardEl.innerHTML += `<div class="cb-num" id="cb-${i}">${i}</div>`;
+        }
+
+        function joinGame() {
+            myName = document.getElementById('username').value.trim();
+            roomId = document.getElementById('roomName').value.trim();
+            if(!myName || !roomId) return alert("Nhập đủ thông tin!");
+
+            document.getElementById('loginScreen').classList.remove('active');
+            document.getElementById('gameScreen').classList.add('active');
+            document.getElementById('displayRoom').innerText = roomId;
+
+            // Đăng ký Host
+            db.ref(`loto/${roomId}/host`).transaction(curr => curr || myName, (err, committed, snap) => {
+                if(committed && snap.val() === myName) {
+                    isHost = true;
+                    document.getElementById('roleDisplay').innerText = "Bạn là Cái (Host)";
+                    document.getElementById('hostControls').classList.remove('hidden');
+                } else {
+                    document.getElementById('roleDisplay').innerText = "Tay em";
+                    document.getElementById('playerActions').classList.remove('hidden');
+                }
+            });
+
+            generateTicket(); // Tạo vé cho riêng mình
+            listenGame();
+        }
+
+        // --- THUẬT TOÁN TẠO VÉ LÔ TÔ (Cơ bản) ---
+        function generateTicket() {
+            // Quy tắc: 3 dòng, 9 cột. 
+            // Cột 1 (1-9), Cột 2 (10-19)... Cột 9 (80-90)
+            // Mỗi dòng phải có đúng 5 số.
+            myTicketData = [[], [], []];
+            const colRanges = [
+                [1,9], [10,19], [20,29], [30,39], [40,49], 
+                [50,59], [60,69], [70,79], [80,90]
+            ];
+
+            // 1. Fill số ngẫu nhiên vào các cột cho đủ điều kiện (mỗi cột ít nhất 1 số nếu chơi chuẩn, nhưng để đơn giản ta random theo dòng)
+            // Cách đơn giản hóa: Mỗi dòng chọn random 5 cột để điền số
+            for (let r = 0; r < 3; r++) {
+                let row = new Array(9).fill(null);
+                // Chọn 5 cột ngẫu nhiên từ 0-8
+                let cols = [];
+                while(cols.length < 5) {
+                    let c = Math.floor(Math.random() * 9);
+                    if(!cols.includes(c)) cols.push(c);
+                }
+                
+                // Điền số vào 5 cột đó
+                cols.forEach(c => {
+                    let min = colRanges[c][0];
+                    let max = colRanges[c][1];
+                    let num;
+                    // Đảm bảo không trùng số trong cùng 1 cột của các dòng trước
+                    do {
+                        num = Math.floor(Math.random() * (max - min + 1)) + min;
+                    } while (
+                        (r > 0 && myTicketData[r-1][c] === num) || 
+                        (r > 1 && myTicketData[r-2][c] === num)
+                    );
+                    row[c] = num;
+                });
+                myTicketData[r] = row;
+            }
+            renderTicketUI();
+        }
+
+        function renderTicketUI() {
+            const ticketEl = document.getElementById('myTicket');
+            ticketEl.innerHTML = '';
+            myTicketData.forEach((row, rIndex) => {
+                let rowHtml = '<div class="ticket-row">';
+                row.forEach((num, cIndex) => {
+                    if (num === null) {
+                        rowHtml += `<div class="cell empty"></div>`;
+                    } else {
+                        // Check xem số đã ra chưa để highlight
+                        const isMarked = drawnNumbers.includes(num);
+                        rowHtml += `<div class="cell has-number ${isMarked ? 'marked' : ''}" id="cell-${num}">${num}</div>`;
+                    }
+                });
+                rowHtml += '</div>';
+                ticketEl.innerHTML += rowHtml;
+            });
+        }
+
+        // --- GAME LOGIC ---
+        function listenGame() {
+            const roomRef = db.ref(`loto/${roomId}`);
+            
+            roomRef.child('currentNumber').on('value', snap => {
+                const num = snap.val();
+                if(num) {
+                    document.getElementById('currentBall').innerText = num;
+                    if(!drawnNumbers.includes(num)) {
+                        drawnNumbers.push(num);
+                        document.getElementById('logBalls').innerText = "Đã ra: " + drawnNumbers.slice(-10).join(', ');
+                        
+                        // Highlight trên vé
+                        const cell = document.getElementById(`cell-${num}`);
+                        if(cell) cell.classList.add('marked');
+                        
+                        // Highlight bảng dò
+                        document.getElementById(`cb-${num}`).classList.add('active');
+
+                        // Đọc số (Nếu bật)
+                        speakNumber(num);
+                    }
+                } else {
+                    // Reset
+                    document.getElementById('currentBall').innerText = "--";
+                    drawnNumbers = [];
+                    document.querySelectorAll('.cell').forEach(e => e.classList.remove('marked'));
+                    document.querySelectorAll('.cb-num').forEach(e => e.classList.remove('active'));
+                }
+            });
+
+            roomRef.child('winner').on('value', snap => {
+                if(snap.val()) alert(`📢 LOA LOA: ${snap.val()} ĐÃ TRÚNG THƯỞNG!`);
+            });
+        }
+
+        // --- HOST ACTIONS ---
+        function drawNumber() {
+            if(drawnNumbers.length >= 90) return alert("Hết số rồi!");
+            let num;
+            do {
+                num = Math.floor(Math.random() * 90) + 1;
+            } while (drawnNumbers.includes(num));
+
+            // Hiệu ứng quay số giả trân
+            let count = 0;
+            const interval = setInterval(() => {
+                document.getElementById('currentBall').innerText = Math.floor(Math.random()*90)+1;
+                count++;
+                if(count > 10) {
+                    clearInterval(interval);
+                    // Gửi số chốt lên server
+                    db.ref(`loto/${roomId}/currentNumber`).set(num);
+                }
+            }, 50);
+        }
+
+        function resetGame() {
+            if(confirm("Chơi ván mới? (Mọi người sẽ bị reset vé)")) {
+                 db.ref(`loto/${roomId}`).set({ host: myName });
+                 // Reload lại trang để tạo vé mới
+                 setTimeout(() => location.reload(), 500);
+            }
+        }
+
+        // --- PLAYER ACTIONS ---
+        function claimWin(type) {
+            // Chỉ gửi thông báo thôi, kiểm tra bằng cơm cho vui
+            db.ref(`loto/${roomId}/winner`).set(`${myName} hô ${type}`);
+        }
+
+        // --- VOICE (Giọng chị Google) ---
+        function speakNumber(num) {
+            if(!document.getElementById('voiceToggle') || !document.getElementById('voiceToggle').checked) return;
+            
+            // Câu dẫn vui vẻ
+            const phrases = ["Số gì đây, số gì đây", "Con số", "Lô tô", "Cờ ra con mấy"];
+            const randomPhrase = phrases[Math.floor(Math.random() * phrases.length)];
+            
+            const msg = new SpeechSynthesisUtterance(`${randomPhrase}. Số ${num}. Con số ${num}.`);
+            msg.lang = 'vi-VN';
+            window.speechSynthesis.speak(msg);
+        }
+
+    </script>
+</body>
+</html>

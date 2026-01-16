@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Xì Dách Online 10A2</title>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+    
+    <style>
+        :root { --main-color: #2e7d32; --card-w: 60px; --card-h: 84px; }
+        body { font-family: 'Segoe UI', sans-serif; background: var(--main-color); color: white; text-align: center; margin: 0; padding: 10px; }
+        
+        /* Màn hình đăng nhập */
+        .screen { display: none; }
+        .active { display: block; }
+        #loginScreen { background: white; color: #333; padding: 20px; border-radius: 10px; max-width: 400px; margin: 50px auto; }
+        input, button { padding: 10px; width: 90%; margin: 5px; border-radius: 5px; border: 1px solid #ccc; }
+        button { background: #ffeb3b; border: none; font-weight: bold; cursor: pointer; color: #333; }
+        
+        /* Bàn chơi */
+        .game-board { max-width: 800px; margin: 0 auto; }
+        .dealer-area { background: rgba(0,0,0,0.2); padding: 10px; border-radius: 10px; margin-bottom: 20px; min-height: 120px; }
+        .player-area { background: rgba(255,255,255,0.1); padding: 10px; border-radius: 10px; margin-bottom: 10px; }
+        .my-area { border: 2px solid #ffeb3b; background: rgba(0,0,0,0.3); }
+        
+        /* Lá bài */
+        .hand { display: flex; justify-content: center; gap: 5px; margin-top: 10px; flex-wrap: wrap; }
+        .card { 
+            width: var(--card-w); height: var(--card-h); 
+            background: white; color: #333; border-radius: 5px; 
+            display: flex; flex-direction: column; justify-content: center; align-items: center; 
+            font-weight: bold; font-size: 1.2rem; position: relative;
+            box-shadow: 2px 2px 5px rgba(0,0,0,0.3);
+        }
+        .card.red { color: #d32f2f; }
+        .card.black { color: #333; }
+        .card-back { background: #b71c1c; border: 2px solid white; background-image: linear-gradient(45deg, #b71c1c 25%, #d32f2f 25%, #d32f2f 50%, #b71c1c 50%, #b71c1c 75%, #d32f2f 75%, #d32f2f 100%); background-size: 10px 10px; }
+        
+        .score-badge { background: #333; color: white; padding: 2px 8px; border-radius: 10px; font-size: 0.8rem; margin-top: 5px; display: inline-block;}
+        .controls { position: fixed; bottom: 0; left: 0; width: 100%; background: rgba(0,0,0,0.8); padding: 10px; display: flex; justify-content: center; gap: 10px; }
+        .hidden { display: none !important; }
+        .status-msg { color: #ffeb3b; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <div id="loginScreen" class="screen active">
+        <h1>♣️ XÌ DÁCH 10A2 ♠️</h1>
+        <input type="text" id="username" placeholder="Tên bạn (VD: Kiệt)">
+        <input type="text" id="roomName" placeholder="Tên phòng (VD: 10a2)">
+        <button onclick="joinGame()">Vào Sòng</button>
+    </div>
+
+    <div id="gameScreen" class="screen game-board">
+        <div style="display:flex; justify-content:space-between; padding:5px;">
+            <span>Phòng: <b id="displayRoom">...</b></span>
+            <span id="roleDisplay">...</span>
+        </div>
+
+        <div class="dealer-area">
+            <h3>👑 NHÀ CÁI <span id="dealerName"></span></h3>
+            <div class="hand" id="dealerHand"></div>
+            <div class="score-badge" id="dealerScore">? điểm</div>
+        </div>
+
+        <div id="msg" class="status-msg"></div>
+
+        <div class="player-area my-area">
+            <h3>👤 BẠN (<span id="myName"></span>)</h3>
+            <div class="hand" id="myHand"></div>
+            <div class="score-badge" id="myScore">0 điểm</div>
+        </div>
+
+        <div id="otherPlayers"></div>
+
+        <div style="height: 60px;"></div> </div>
+
+    <div id="controls" class="controls hidden">
+        <div id="hostControls" class="hidden">
+            <button onclick="startGame()">CHIA BÀI MỚI</button>
+            <button onclick="dealerHit()">Cái Rút</button>
+            <button onclick="revealAll()" style="background:orange">LẬT BÀI CÁI</button>
+        </div>
+        <div id="playerControls" class="hidden">
+            <button onclick="hit()">RÚT BÀI</button>
+            <button onclick="stand()" style="background:#ddd">DẰN (Thôi)</button>
+        </div>
+    </div>
+
+    <script>
+        // --- CẤU HÌNH --- (DÁN CONFIG CỦA BẠN VÀO ĐÂY)
+        const firebaseConfig = {
+            apiKey: "AIzaSyDezhyeDURAA_WfX8xxhGJ7KcNTVM8cwO4",
+            authDomain: "tuankiet-gametet.firebaseapp.com",
+            projectId: "tuankiet-gametet",
+            storageBucket: "tuankiet-gametet.firebasestorage.app",
+            messagingSenderId: "406766414133",
+            appId: "1:406766414133:web:e4a99221da90dcc657847c",
+            databaseURL: "https://tuankiet-gametet-default-rtdb.firebaseio.com"
+        };
+        // ----------------
+
+        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        let myName = "";
+        let roomId = "";
+        let isHost = false;
+        let gameStatus = "waiting"; // waiting, playing, revealing
+        let deck = [];
+
+        function joinGame() {
+            myName = document.getElementById('username').value.trim();
+            roomId = document.getElementById('roomName').value.trim();
+            if(!myName || !roomId) return alert("Nhập đủ tên và phòng!");
+
+            document.getElementById('loginScreen').classList.remove('active');
+            document.getElementById('gameScreen').classList.add('active');
+            document.getElementById('controls').classList.remove('hidden');
+            document.getElementById('displayRoom').innerText = roomId;
+            document.getElementById('myName').innerText = myName;
+
+            // Đăng ký vào phòng
+            const pRef = db.ref(`blackjack/${roomId}/players/${myName}`);
+            pRef.set({ name: myName, hand: [], score: 0, status: 'ready' });
+            pRef.onDisconnect().remove(); // Thoát thì xóa tên
+
+            // Kiểm tra xem ai là Chủ Phòng (người vào đầu tiên hoặc đc set)
+            db.ref(`blackjack/${roomId}/host`).transaction((current) => {
+                if (current === null) return myName; // Chưa có ai thì mình làm chủ
+                return current;
+            }, (error, committed, snapshot) => {
+                if (committed && snapshot.val() === myName) {
+                    isHost = true;
+                    document.getElementById('roleDisplay').innerText = "(Bạn là Nhà Cái)";
+                    document.getElementById('hostControls').classList.remove('hidden');
+                } else {
+                    document.getElementById('roleDisplay').innerText = "(Bạn là Nhà Con)";
+                }
+            });
+
+            listenGame();
+        }
+
+        function listenGame() {
+            // Nghe toàn bộ phòng
+            db.ref(`blackjack/${roomId}`).on('value', snap => {
+                const data = snap.val() || {};
+                const players = data.players || {};
+                const dealer = data.dealer || { hand: [], score: 0 };
+                gameStatus = data.status || 'waiting';
+                const hostName = data.host || "Chưa có";
+
+                document.getElementById('dealerName').innerText = hostName;
+                document.getElementById('msg').innerText = data.message || "";
+
+                // Render Nhà Cái
+                renderHand('dealerHand', dealer.hand, (gameStatus === 'revealing' || isHost), true);
+                document.getElementById('dealerScore').innerText = (gameStatus === 'revealing' || isHost) ? getScoreText(dealer.hand) : "?";
+
+                // Render Tôi
+                const myData = players[myName] || { hand: [] };
+                renderHand('myHand', myData.hand, true, false);
+                document.getElementById('myScore').innerText = getScoreText(myData.hand);
+
+                // Hiển thị nút chơi nếu đang playing
+                if (!isHost) {
+                    const controls = document.getElementById('playerControls');
+                    if (gameStatus === 'playing' && myData.status !== 'stand') controls.classList.remove('hidden');
+                    else controls.classList.add('hidden');
+                }
+
+                // Render người khác
+                const otherDiv = document.getElementById('otherPlayers');
+                otherDiv.innerHTML = '';
+                Object.values(players).forEach(p => {
+                    if (p.name === myName) return;
+                    otherDiv.innerHTML += `
+                        <div class="player-area">
+                            <div><b>${p.name}</b> (${p.status === 'stand' ? 'Đã dằn' : 'Đang nghĩ'})</div>
+                            <div class="hand">
+                                ${p.hand ? p.hand.map(c => `<div class="card card-back" style="width:30px;height:42px"></div>`).join('') : ''}
+                            </div>
+                            ${gameStatus === 'revealing' ? `<div class="score-badge">${getScoreText(p.hand)}</div>` : ''}
+                        </div>
+                    `;
+                });
+            });
+        }
+
+        // --- LOGIC GAME (Chỉ Host chạy cái này) ---
+        function startGame() {
+            if(!isHost) return;
+            // 1. Tạo bộ bài 52 lá
+            const suits = ['♠', '♣', '♦', '♥'];
+            const values = ['2','3','4','5','6','7','8','9','10','J','Q','K','A'];
+            let newDeck = [];
+            for(let s of suits) {
+                for(let v of values) {
+                    let color = (s === '♦' || s === '♥') ? 'red' : 'black';
+                    newDeck.push({ suit: s, value: v, color: color });
+                }
+            }
+            newDeck.sort(() => Math.random() - 0.5); // Xáo bài
+
+            // 2. Chia cho mỗi người 2 lá
+            // Lấy danh sách players
+            db.ref(`blackjack/${roomId}/players`).once('value', snap => {
+                const players = snap.val() || {};
+                const updates = {};
+                
+                // Chia cho nhà con
+                Object.keys(players).forEach(key => {
+                    const c1 = newDeck.pop();
+                    const c2 = newDeck.pop();
+                    updates[`players/${key}/hand`] = [c1, c2];
+                    updates[`players/${key}/status`] = 'playing';
+                });
+
+                // Chia cho nhà cái
+                const d1 = newDeck.pop();
+                const d2 = newDeck.pop();
+                updates[`dealer`] = { hand: [d1, d2] };
+                
+                updates[`deck`] = newDeck;
+                updates[`status`] = 'playing';
+                updates[`message`] = 'Bắt đầu! Nhà con rút bài đi.';
+
+                db.ref(`blackjack/${roomId}`).update(updates);
+            });
+        }
+
+        // --- HÀNH ĐỘNG CỦA NHÀ CON ---
+        function hit() {
+            // Rút 1 lá từ bộ bài chung
+            db.ref(`blackjack/${roomId}/deck`).transaction(currentDeck => {
+                if(!currentDeck || currentDeck.length === 0) return currentDeck; // Hết bài
+                const card = currentDeck.pop(); // Lấy lá cuối
+                
+                // Cập nhật bài của mình
+                db.ref(`blackjack/${roomId}/players/${myName}/hand`).once('value', snap => {
+                    const hand = snap.val() || [];
+                    hand.push(card);
+                    db.ref(`blackjack/${roomId}/players/${myName}/hand`).set(hand);
+                });
+
+                return currentDeck; // Lưu bộ bài còn lại
+            });
+        }
+
+        function stand() {
+            db.ref(`blackjack/${roomId}/players/${myName}/status`).set('stand');
+        }
+
+        // --- HÀNH ĐỘNG CỦA NHÀ CÁI ---
+        function dealerHit() {
+             db.ref(`blackjack/${roomId}/deck`).transaction(currentDeck => {
+                if(!currentDeck || currentDeck.length === 0) return currentDeck;
+                const card = currentDeck.pop();
+                
+                db.ref(`blackjack/${roomId}/dealer/hand`).once('value', snap => {
+                    const hand = snap.val() || [];
+                    hand.push(card);
+                    db.ref(`blackjack/${roomId}/dealer/hand`).set(hand);
+                });
+                return currentDeck;
+            });
+        }
+
+        function revealAll() {
+            db.ref(`blackjack/${roomId}`).update({
+                status: 'revealing',
+                message: 'Kết thúc! So điểm nào.'
+            });
+        }
+
+        // --- HÀM HỖ TRỢ (UI & TÍNH ĐIỂM) ---
+        function renderHand(elementId, hand, showFace, isDealer) {
+            const el = document.getElementById(elementId);
+            el.innerHTML = '';
+            if(!hand) return;
+
+            hand.forEach((c, index) => {
+                // Nếu không được xem mặt (showFace=false) thì hiện úp
+                // Trừ khi là lá đầu tiên của Nhà cái (thường mở 1 lá) - Ở đây ta cho úp hết cho kịch tính
+                if (!showFace) {
+                    el.innerHTML += `<div class="card card-back"></div>`;
+                } else {
+                    el.innerHTML += `
+                        <div class="card ${c.color}">
+                            <div style="font-size:0.8rem;position:absolute;top:2px;left:5px">${c.value}</div>
+                            <div>${c.suit}</div>
+                        </div>`;
+                }
+            });
+        }
+
+        function getScoreText(hand) {
+            if(!hand) return 0;
+            let score = 0;
+            let aces = 0;
+            
+            // Tính điểm sơ bộ
+            hand.forEach(c => {
+                if(['J','Q','K'].includes(c.value)) score += 10;
+                else if(c.value === 'A') { aces += 1; score += 1; } // Mặc định A là 1
+                else score += parseInt(c.value);
+            });
+
+            // Xử lý bài đặc biệt (chỉ khi 2 lá)
+            if(hand.length === 2) {
+                if(aces === 2) return "Xì Bàng (Thắng)"; // AA
+                if(aces === 1 && score >= 11) return "Xì Dách (Thắng)"; // A + 10/J/Q/K
+            }
+            
+            // Xử lý Ngũ Linh (5 lá <= 21)
+            if(hand.length === 5 && score <= 21) {
+                // Check lại logic A cho Ngũ Linh nếu cần, nhưng cơ bản <=21 là ăn
+                return `Ngũ Linh (${score})`; 
+            }
+
+            // Xử lý A tính là 10 hoặc 11
+            // Nếu có A và cộng thêm 10 mà chưa Quắc thì cộng
+            if (aces > 0 && score + 10 <= 21) {
+                score += 10;
+            }
+
+            if (score > 21) return `Quắc (${score})`;
+            if (score < 16) return `Non (${score})`;
+            return `Đủ tuổi (${score})`;
+        }
+    </script>
+</body>
+</html>
