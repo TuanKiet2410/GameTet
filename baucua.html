@@ -127,6 +127,7 @@
     <audio id="soundLose" src="https://www.soundjay.com/misc/sounds/fail-trombone-01.mp3" preload="auto"></audio>
 
     <script>
+        // --- CẤU HÌNH FIREBASE ---
         const firebaseConfig = {
             apiKey: "AIzaSyDezhyeDURAA_WfX8xxhGJ7KcNTVM8cwO4",
             authDomain: "tuankiet-gametet.firebaseapp.com",
@@ -153,15 +154,15 @@
         let myBalance = 0;
         let isShaking = false;
         let amIReady = false;
-        let isHost = false; // Nhà Cái
+        let isHost = false; 
+        let currentHostName = ''; // Biến mới để lưu tên chủ phòng
         
         let myCurrentBets = { nai:0, bau:0, ga:0, ca:0, cua:0, tom:0 };
-        let currentGlobalBets = {}; // Lưu cược toàn bộ bàn để Cái tính tiền
+        let currentGlobalBets = {}; 
 
         function validateBetInput(input) {
             let val = parseInt(input.value);
             if (isNaN(val) || val < 1) input.value = 1;
-            // Cho phép cược lớn hơn chút
             if (val > 1000) input.value = 1000;
         }
 
@@ -216,17 +217,14 @@
                 if (error) return;
                 const actualHost = snapshot.val();
                 
-                // Xác định vai trò
                 if (actualHost === myName) {
                     isHost = true;
                     document.getElementById('roleLabel').innerHTML = '<span class="host-badge">NHÀ CÁI</span>';
-                    alert("👑 BẠN LÀ NHÀ CÁI! Bạn sẽ ăn thua trực tiếp với người chơi.");
+                    alert("👑 BẠN LÀ NHÀ CÁI!");
                     
                     document.getElementById('shakeBtn').classList.remove('admin-only');
                     document.getElementById('adminPanel').classList.remove('admin-only');
-                    // Ẩn nút Chốt đơn vì Cái không cược
                     document.getElementById('readyBtn').style.display = 'none';
-                    // Ẩn input cược
                     document.querySelector('.bet-control-panel').style.display = 'none';
 
                     hostRef.onDisconnect().remove();
@@ -258,49 +256,58 @@
             }
         }
 
+        // --- PHẦN SỬA LỖI CHÍNH Ở ĐÂY ---
         function listenToRoom() {
             const roomRef = db.ref('rooms/' + roomId);
 
-            // Nghe người chơi
+            // 1. Nghe xem ai là Host để cập nhật biến toàn cục
+            roomRef.child('host').on('value', snap => {
+                currentHostName = snap.val();
+            });
+
+            // 2. Nghe danh sách người chơi
             roomRef.child('players').on('value', (snapshot) => {
                 const players = snapshot.val() || {};
                 const listEl = document.getElementById('playerList');
                 listEl.innerHTML = '';
-                let allReady = true;
-                let playerCount = 0;
+                
+                let allPlayersReady = true;
+                let activePlayerCount = 0; // Số người chơi (không tính cái)
 
                 Object.keys(players).forEach(name => {
-                    // Không hiện Cái trong danh sách người chờ ready (vì Cái không cần ready)
-                    db.ref(`rooms/${roomId}/host`).once('value', hSnap => {
-                        const hostName = hSnap.val();
-                        if (name === hostName) {
-                            listEl.innerHTML += `<div class="player-tag" style="border:2px solid red; font-weight:bold">👑 Cái: ${name}</div>`;
-                            return; 
-                        }
-                        
-                        playerCount++;
-                        const p = players[name];
-                        if (!p.ready) allReady = false;
-                        listEl.innerHTML += `<div class="player-tag ${p.ready ? 'ready' : ''}"><div class="status-dot"></div>${name}</div>`;
-                    });
+                    const p = players[name];
+
+                    // Nếu là Cái: Hiển thị khác và KHÔNG tính vào logic Ready
+                    if (name === currentHostName) {
+                        listEl.innerHTML += `<div class="player-tag" style="border:2px solid red; font-weight:bold; color:#d32f2f">👑 Cái: ${name}</div>`;
+                        return; // Bỏ qua, không chạy dòng check ready bên dưới
+                    }
+
+                    // Nếu là Nhà con
+                    activePlayerCount++;
+                    if (!p.ready) allPlayersReady = false; // Chỉ cần 1 nhà con chưa ready là false
+
+                    listEl.innerHTML += `<div class="player-tag ${p.ready ? 'ready' : ''}"><div class="status-dot"></div>${name}</div>`;
                 });
 
-                // Cập nhật nút Xóc cho Cái
+                // Logic bật nút Xóc cho Cái
                 const shakeBtn = document.getElementById('shakeBtn');
                 if (isHost) {
-                    if (playerCount > 0 && allReady) {
+                    // Điều kiện: Có ít nhất 1 nhà con VÀ tất cả nhà con đã ready
+                    if (activePlayerCount > 0 && allPlayersReady) {
                         shakeBtn.disabled = false;
                         shakeBtn.classList.remove('btn-disabled');
                         shakeBtn.innerText = "XÓC NGAY 🎲";
                     } else {
                         shakeBtn.disabled = true;
                         shakeBtn.classList.add('btn-disabled');
-                        shakeBtn.innerText = `Chờ nhà con chốt...`;
+                        // Hiển thị chờ ai đó
+                        shakeBtn.innerText = activePlayerCount === 0 ? "Chờ người chơi..." : "Chờ nhà con chốt...";
                     }
                 }
             });
 
-            // Nghe kết quả
+            // Các listeners khác giữ nguyên...
             roomRef.child('diceStatus').on('value', (snapshot) => {
                 const status = snapshot.val(); 
                 if(!status) return;
@@ -318,14 +325,10 @@
                     });
                     
                     if (isShaking) { 
-                        // TÍNH TIỀN
-                        if (isHost) {
-                            calculateHostResult(status.result);
-                        } else {
-                            calculatePlayerResult(status.result);
-                        }
+                        if (isHost) calculateHostResult(status.result);
+                        else calculatePlayerResult(status.result);
                         
-                        findAndAnnounceBigWinner(status.result); // Vẫn tìm thần bài
+                        findAndAnnounceBigWinner(status.result);
                         isShaking = false;
                         
                         if (!isHost) {
@@ -338,10 +341,9 @@
                 }
             });
 
-            // Nghe cược
             roomRef.child('bets').on('value', (snapshot) => {
                 const allBetsData = snapshot.val() || {};
-                currentGlobalBets = allBetsData; // Lưu lại để Cái tính tiền
+                currentGlobalBets = allBetsData;
                 mascots.forEach(m => {
                     const mascotBets = allBetsData[m.id] || {};
                     let total = 0;
@@ -360,14 +362,12 @@
                     document.getElementById(`detail-${m.id}`).innerHTML = detailsHTML;
                 });
             });
-            
-            // Nghe lệnh hoàn tiền
+
             roomRef.child('command').on('value', (snapshot) => {
                 const cmd = snapshot.val();
                 if (!cmd) return;
                 if (cmd.type === 'REFUND' && cmd.timestamp > (window.lastProcessedCmd || 0)) {
                     window.lastProcessedCmd = cmd.timestamp;
-                    // Nếu là Cái thì không cần hoàn tiền (vì chưa trừ tiền)
                     if (!isHost) {
                         let totalRefund = 0;
                         mascots.forEach(m => { totalRefund += myCurrentBets[m.id]; });
@@ -404,12 +404,11 @@
             betRef.transaction((current) => (current || 0) + betAmount);
         }
 
-        // --- TÍNH TIỀN CHO NGƯỜI CHƠI (CON) ---
+        // --- TÍNH TIỀN ---
         function calculatePlayerResult(resultIndices) {
             let totalBet = 0;
-            let totalReturn = 0; // Gốc về
-            let totalProfit = 0; // Lãi (Lấy từ túi Cái)
-            
+            let totalReturn = 0;
+            let totalProfit = 0;
             const winningIds = resultIndices.map(i => mascots[i].id);
 
             mascots.forEach(m => {
@@ -427,9 +426,7 @@
             const totalReceived = totalReturn + totalProfit;
             const netResult = totalReceived - totalBet;
 
-            if (totalReceived > 0) {
-                myBalance += totalReceived;
-            }
+            if (totalReceived > 0) myBalance += totalReceived;
             updateBalanceUI();
             playSound(netResult);
 
@@ -437,37 +434,25 @@
             if (netResult > 0) msg = `🎉 Ăn của Cái: +${netResult}$`;
             else if (netResult === 0) msg = `😐 Hòa vốn`;
             else msg = `💸 Cúng cho Cái: ${Math.abs(netResult)}$`;
-            
             document.getElementById('log').innerText = msg;
             resetLocalBets();
         }
 
-        // --- TÍNH TIỀN CHO NHÀ CÁI (HOST) ---
         function calculateHostResult(resultIndices) {
             const winningIds = resultIndices.map(i => mascots[i].id);
-            let totalRevenue = 0; // Tổng tiền thu về (tất cả tiền cược trên bàn)
-            let totalPayout = 0;  // Tổng tiền phải chi ra (Gốc + Lãi cho người trúng)
+            let totalRevenue = 0; 
+            let totalPayout = 0;  
 
             mascots.forEach(m => {
                 const betsOnMascot = currentGlobalBets[m.id] || {};
-                
-                // Duyệt qua tất cả người cược vào con này
                 Object.values(betsOnMascot).forEach(amount => {
-                    totalRevenue += amount; // Thu hết tiền vào túi trước
-
+                    totalRevenue += amount; 
                     const count = winningIds.filter(id => id === m.id).length;
-                    if (count > 0) {
-                        // Nếu trúng: Trả lại Gốc + Trả thêm Lãi
-                        // Gốc = amount
-                        // Lãi = amount * count
-                        totalPayout += amount + (amount * count);
-                    }
+                    if (count > 0) totalPayout += amount + (amount * count);
                 });
             });
 
-            // Lợi nhuận của Cái = Tổng thu - Tổng chi
             const netIncome = totalRevenue - totalPayout;
-            
             myBalance += netIncome;
             updateBalanceUI();
             playSound(netIncome);
@@ -476,11 +461,9 @@
             if (netIncome > 0) msg = `🤑 Cái ăn: +${netIncome}$`;
             else if (netIncome === 0) msg = `😐 Cái hòa tiền`;
             else msg = `😭 Cái đền làng: ${netIncome}$`;
-
             document.getElementById('log').innerText = msg;
         }
 
-        // --- TIỆN ÍCH CHUNG ---
         function playSound(amount) {
             if (amount > 0) document.getElementById('soundWin').play().catch(()=>{});
             else if (amount < 0) document.getElementById('soundLose').play().catch(()=>{});
@@ -503,23 +486,18 @@
 
             let maxProfit = -999999999;
             let winnerName = '';
-
             for (const [player, profit] of Object.entries(playerProfits)) {
                 if (profit > maxProfit) {
                     maxProfit = profit;
                     winnerName = player;
                 }
             }
-            
-            // Không tính nhà cái vào danh sách thần bài (để nhường spotlight cho người chơi)
-            db.ref(`rooms/${roomId}/host`).once('value', snap => {
-                if (winnerName !== snap.val() && winnerName && maxProfit > 0) {
-                    document.getElementById('winName').innerText = winnerName;
-                    document.getElementById('winAmount').innerText = `+${maxProfit}$`;
-                    document.getElementById('winnerOverlay').style.display = 'flex';
-                    setTimeout(() => { document.getElementById('winnerOverlay').style.display = 'none'; }, 4000);
-                }
-            });
+            if (winnerName && winnerName !== currentHostName && maxProfit > 0) {
+                document.getElementById('winName').innerText = winnerName;
+                document.getElementById('winAmount').innerText = `+${maxProfit}$`;
+                document.getElementById('winnerOverlay').style.display = 'flex';
+                setTimeout(() => { document.getElementById('winnerOverlay').style.display = 'none'; }, 4000);
+            }
         }
         
         function closeWinnerPopup() { document.getElementById('winnerOverlay').style.display = 'none'; }
@@ -528,28 +506,28 @@
 
         function requestShake() {
             if (!isHost) return alert("Chỉ NHÀ CÁI mới được Xóc!");
+            
+            // Logic xóc: Kiểm tra kỹ lại một lần nữa xem có ai chưa ready không (trừ bản thân Cái)
             db.ref(`rooms/${roomId}/players`).once('value', snap => {
-                const players = snap.val() || {}; // Handle case no players
-                // Cái không cần ready, chỉ check người chơi thường
-                // Lọc ra danh sách người chơi không phải là host
-                db.ref(`rooms/${roomId}/host`).once('value', hSnap => {
-                     const hostName = hSnap.val();
-                     let allReady = true;
-                     
-                     Object.keys(players).forEach(pName => {
-                         if (pName !== hostName && !players[pName].ready) {
-                             allReady = false;
-                         }
-                     });
+                const players = snap.val() || {};
+                let allReady = true;
+                let activePlayerCount = 0;
 
-                    if (!allReady) return alert("Có nhà con chưa chốt đơn!");
-
-                    db.ref(`rooms/${roomId}/diceStatus`).set({ shaking: true });
-                    setTimeout(() => {
-                        const r = [0,0,0].map(() => Math.floor(Math.random() * 6));
-                        db.ref(`rooms/${roomId}/diceStatus`).set({ shaking: false, result: r });
-                    }, 2000);
+                Object.keys(players).forEach(name => {
+                    if (name !== currentHostName) { // Bỏ qua Cái
+                        activePlayerCount++;
+                        if (!players[name].ready) allReady = false;
+                    }
                 });
+
+                if (activePlayerCount === 0) return alert("Chưa có người chơi nào!");
+                if (!allReady) return alert("Vẫn còn nhà con chưa chốt đơn!");
+
+                db.ref(`rooms/${roomId}/diceStatus`).set({ shaking: true });
+                setTimeout(() => {
+                    const r = [0,0,0].map(() => Math.floor(Math.random() * 6));
+                    db.ref(`rooms/${roomId}/diceStatus`).set({ shaking: false, result: r });
+                }, 2000);
             });
         }
 
